@@ -1,9 +1,10 @@
 # Technical Plan — FC 26 Manager Career Analytics Suite
 
 > Master technical document for the new project direction.
-> Supersedes `PLAN_TECHNIQUE_REGEN_DETECTOR.md` (the clone-detection project is retired — retiring players are removed from the DB before comparisons are possible, which makes the approach unreliable for end users).
-> Last updated: 2026-04-16
+> Supersedes `PLAN_TECHNIQUE_REGEN_DETECTOR.md` (the clone-detection project is retired — retiring players are removed from the DB before comparisons are possible).
+> Last updated: 2026-04-17
 > Status: **Planning only — no implementation yet.**
+> Major revision: schema grounded in the manually-verified [`Structure Base de Données FC 26.md`](Structure%20Base%20de%20Données%20FC%2026.md) (hereafter **SBDD**).
 
 ---
 
@@ -14,17 +15,17 @@ Build a **Python desktop analytics and scouting utility for EA Sports FC 26 Mana
 ### Core principles
 
 - **Offline-first**: the desktop app never touches the game. It reads only CSV files exported by a dedicated Lua script.
-- **Ergonomic UI/UX**: modern, polished, readable, intuitive. UI quality is a first-class requirement, not a finishing touch.
+- **Ergonomic UI/UX**: modern, polished, readable, intuitive. UI quality is a first-class requirement.
 - **Visual analytics**: prioritize charts, trends, and at-a-glance summaries over raw tables.
 - **Deterministic**: same CSV input → same dashboards. No hidden state, no network calls.
-- **Seasonal focus**: the app understands the structure of a career-mode season (league position, form, transfers, youth intake) and organizes data around it.
+- **Seasonal focus**: the app models a career-mode season (league position, form, transfers, youth intake) end-to-end.
 
 ### Non-goals
 
 - Real-time integration with the live game.
 - Direct Live Editor execution from Python.
-- Any form of retired-player / regen clone detection (abandoned direction).
-- Cloud sync, multi-user features, or online services.
+- Regen clone detection (abandoned direction).
+- Cloud sync, multi-user, or online services.
 
 ---
 
@@ -35,13 +36,13 @@ Build a **Python desktop analytics and scouting utility for EA Sports FC 26 Mana
 [2] User opens Live Editor
 [3] User runs our dedicated Lua export script(s)
 [4] Script writes CSV file(s) to the Desktop
-[5] User launches the Python desktop app (PySide)
+[5] User launches the Python desktop app (PySide6)
 [6] User imports the CSV(s) via the UI
 [7] App parses, indexes, and builds dashboards
 [8] User explores Overview / Analytics / Squad / Wonderkids / Tactics / Transfers
 ```
 
-The Python app is a **pure CSV consumer**. It never executes Lua, never reads game memory, never modifies the save.
+The Python app is a **pure CSV consumer**.
 
 ---
 
@@ -52,27 +53,17 @@ The Python app is a **pure CSV consumer**. It never executes Lua, never reads ga
 ```
 ┌──────────────────────────────────────────────────────┐
 │  UI Layer (PySide6)                                  │
-│  - Pages, widgets, charts, theming                   │
 ├──────────────────────────────────────────────────────┤
 │  Presentation / ViewModel Layer                      │
-│  - Page controllers, signals, formatting helpers     │
 ├──────────────────────────────────────────────────────┤
 │  Analytics Engine                                    │
-│  - Aggregations, trends, rankings, scouting logic    │
 ├──────────────────────────────────────────────────────┤
 │  Domain Model                                        │
-│  - Player, Team, League, Season, Fixture, Transfer   │
 ├──────────────────────────────────────────────────────┤
 │  Import / Parsing Pipeline                           │
-│  - CSV discovery, schema detection, type coercion    │
 ├──────────────────────────────────────────────────────┤
-│  Persistence / Cache                                 │
-│  - Per-session parquet or sqlite cache of parsed CSVs│
+│  Persistence / Cache (SQLite)                        │
 └──────────────────────────────────────────────────────┘
-          ▲                                    ▲
-          │                                    │
-    CSVs on disk                       Lua export scripts
-                                        (separate layer)
 ```
 
 ### 3.2 Technology stack
@@ -80,61 +71,173 @@ The Python app is a **pure CSV consumer**. It never executes Lua, never reads ga
 | Layer | Choice |
 |-------|--------|
 | UI framework | **PySide6** (Qt 6) |
-| Charts | **PyQtGraph** primary, **QtCharts** fallback (no Matplotlib in the event loop) |
-| Data handling | **pandas** for tabular ops, **polars** optional later if data grows |
+| Charts | **PyQtGraph** primary, **QtCharts** fallback |
+| Data handling | **pandas** (polars optional later) |
 | CSV parsing | `pandas.read_csv` with explicit dtypes |
-| Persistence / cache | **SQLite** (via `sqlite3` or `SQLModel`) for session cache |
-| Packaging | **PyInstaller** or **Briefcase** (decided before Sprint 1) |
+| Persistence / cache | **SQLite** (`sqlite3`) |
+| Packaging | **PyInstaller** (decision locked — simpler one-file target for Windows) |
 | Config | TOML via `tomllib` (stdlib, Python 3.11+) |
 | Logging | `logging` stdlib, rotating file handler |
-| Testing | `pytest`, `pytest-qt` for UI smoke tests |
+| Testing | `pytest`, `pytest-qt` |
 
 ### 3.3 Threading model
 
 - UI on the main thread only.
-- CSV import, parsing, and heavy aggregations run on a `QThreadPool` worker.
-- Use Qt signals to publish progress and results back to the UI.
-- Never block the event loop — all long ops must show a progress indicator.
+- Imports and heavy aggregations run on `QThreadPool`.
+- Qt signals publish progress/results back to the UI.
 
 ---
 
-## 4. Folder / Module Structure
+## 4. Confirmed Database Schema (from SBDD)
+
+This section is the **source of truth** for all schema references in this plan. Every column name here is copied verbatim from SBDD.
+
+### 4.1 `players` (154 columns confirmed)
+
+Grouped for this plan:
+
+**Identity / naming**
+- `playerid` — PK. `>= 460000` = generated, `< 460000` = real (DB).
+- `firstnameid`, `lastnameid`, `commonnameid`, `playerjerseynameid` — foreign keys into **`playernames.nameid`**.
+- `birthdate` — Gregorian-day integer. Age = f(birthdate, `GetCurrentDate()`).
+- `gender`, `nationality`.
+- `isretiring`, `iscustomized`, `usercaneditname`, `hasseasonaljersey`.
+
+**Positions & roles**
+- `preferredposition1` … `preferredposition7` (all confirmed present).
+- `role1` … `role5` (squad roles / playstyle roles).
+- `preferredfoot`.
+
+**Ratings & attributes (core)**
+- Global: `overallrating`, `potential`, `internationalrep`.
+- GK: `gkdiving`, `gkhandling`, `gkkicking`, `gkpositioning`, `gkreflexes`, `gksavetype`, `gkkickstyle`, `gkglovetypecode`.
+- ATT: `crossing`, `finishing`, `headingaccuracy`, `shortpassing`, `volleys`.
+- DEF: `defensiveawareness`, `standingtackle`, `slidingtackle`.
+- SKL: `dribbling`, `curve`, `freekickaccuracy`, `longpassing`, `ballcontrol`.
+- PWR: `shotpower`, `jumping`, `stamina`, `strength`, `longshots`.
+- MOV: `acceleration`, `sprintspeed`, `agility`, `reactions`, `balance`.
+- MEN: `aggression`, `composure`, `interceptions`, `positioning`, `vision`, `penalties`.
+- Face/stat aggregates (likely the 6 front-face attributes, encoding TBD via probe): `pacdiv`, `shohan`, `paskic`, `driref`, `defspe`, `phypos`.
+
+**Playstyles / traits**
+- `trait1`, `trait2`, `icontrait1`, `icontrait2`.
+- `skillmoves`, `skillmoveslikelihood`, `weakfootabilitytypecode`.
+
+**Contract (inline on players)**
+- `contractvaliduntil`, `playerjointeamdate`.
+
+**Physical / cosmetic (most not used by analytics but preserved)**
+- `height`, `weight`, `bodytypecode`, `muscularitycode`, `headvariation`, `facepsdlayer0`, `facepsdlayer1`, `faceposerpreset`, `headtypecode`, `headclasscode`, `headassetid`, `hashighqualityhead`.
+- Hair / face / tattoo / skin / jersey / shoe / accessory fields (ignored by analytics).
+
+**Not present in `players`** (critical — do not invent):
+- No `age` column.
+- No `firstname` / `lastname` / `commonname` as strings (must JOIN via `playernames`).
+- No `injury` / `form` / `fitness` / `morale` / `sharpness` on `players` (see 4.3).
+- No per-match shot / pass / xG telemetry.
+
+### 4.2 `playernames` (name dictionary)
+
+- `nameid` (PK)
+- `commentaryid`
+- `name` (string, e.g. `"A. Abqar"`)
+
+**Join rule**: resolve display name as `COALESCE(commonname, "firstname + lastname", playerjerseyname)` by joining `players.{firstnameid,lastnameid,commonnameid,playerjerseynameid}` → `playernames.nameid`.
+
+### 4.3 `teamplayerlinks` (player↔team relation and in-season stats)
+
+All columns: `artificialkey` (PK), `teamid`, `playerid`, `jerseynumber`, `position`, `form`, `injury`, `leagueappearances`, `leaguegoals`, `leaguegoalsprevmatch`, `leaguegoalsprevthreematches`, `yellows`, `reds`, `isamongtopscorers`, `isamongtopscorersinteam`, `istopscorer`.
+
+**Impact on plan**:
+- Current club assignment: `(teamid, playerid)`.
+- `position` here is the **effective squad position** (distinct from `preferredposition*` on `players`).
+- `form` and `injury` are **per-player** and live here, not on `players`. This **resolves Points to Verify 16.1 injury/form**.
+- League goals/appearances are on this table, **not** on `players`.
+
+### 4.4 `leagues`
+
+`leagueid` (PK), `leaguename`, `countryid`, `level`, `leaguetype`, `leaguetimeslice`, `isinternationalleague`, `iswomencompetition`, `iswithintransferwindow`, plus competition-presentation flags (`iscompetitioncrowdcardsenabled`, `iscompetitionscarfenabled`, `iscompetitionpoleflagenabled`, `isbannerenabled`).
+
+### 4.5 `leagueteamlinks` (standings row)
+
+`artificialkey` (PK), `leagueid`, `teamid`, `prevleagueid`, `grouping`.
+
+**Standings counters**: `points`, `currenttableposition`, `previousyeartableposition`, `nummatchesplayed`, `homewins`, `homedraws`, `homelosses`, `awaywins`, `awaydraws`, `awaylosses`, `homegf`, `homega`, `awaygf`, `awayga`.
+
+**Form signals**: `teamform`, `teamshortform`, `teamlongform`, `lastgameresult`, `unbeatenhome`, `unbeatenaway`, `unbeatenleague`, `unbeatenallcomps`.
+
+**Objectives**: `objective`, `hasachievedobjective`, `highestpossible`, `highestprobable`, `yettowin`, `actualvsexpectations`, `champion`.
+
+**Impact**: full standings are available for every team, not just the user's. GF/GA split home/away enables rich defensive/attacking charts.
+
+### 4.6 `teams` (club reference + team-level aggregates)
+
+**Identity**: `teamid` (PK), `teamname`, `assetid`, `foundationyear`, `cityid`, `latitude`, `longitude`, `utcoffset`.
+
+**Team ratings**: `overallrating`, `attackrating`, `midfieldrating`, `defenserating`, `matchdayoverallrating`, `matchdayattackrating`, `matchdaymidfieldrating`, `matchdaydefenserating`, `form`.
+
+**Tactical (newly confirmed)**: `buildupplay`, `defensivedepth`.
+
+**Key players**: `captainid`, `penaltytakerid`, `freekicktakerid`, `leftfreekicktakerid`, `rightfreekicktakerid`, `leftcornerkicktakerid`, `rightcornerkicktakerid`, `longkicktakerid`.
+
+**Corner-support plan**: `cksupport1` … `cksupport9` (attacker-movement flags on corners).
+
+**Prestige / honours**: `internationalprestige`, `domesticprestige`, `popularity`, `clubworth`, `profitability`, `youthdevelopment`, `leaguetitles`, `domesticcups`, `uefa_cl_wins`, `uefa_el_wins`, `uefa_uecl_wins`, `uefa_consecutive_wins`, `prev_el_champ`.
+
+**Matchup bias**: `trait1vstrong`, `trait1vweak`, `trait1vequal`, `opponentstrongthreshold`, `opponentweakthreshold`, `rivalteam`.
+
+**Formation pointer**: `favoriteteamsheetid` — **not yet resolved** to a concrete `teamsheets`/`formations` table (see §16.3).
+
+**Stadium / cosmetics**: `teamstadiumcapacity`, `stadiummowpattern_code`, `stadiumgoalnetpattern`, `stadiumgoalnetstyle`, `pitchcolor`, `pitchlinecolor`, `pitchwear`, `playsurfacetype`, `hasstandingcrowd`, `hastifo`, `hasvikingclap`, `hassubstitutionboard`, `hassuncanthem`, `haslargeflag`, `skinnyflags`, banner / flag / crowd flags, team colors (`teamcolor1r/g/b`, `teamcolor2r/g/b`, `teamcolor3r/g/b`), `goalnetstanchioncolor1r/g/b`, `goalnetstanchioncolor2r/g/b`, `genericbanner`, `genericint1`, `genericint2`, `jerseytype`, `ballid`, `presassetone`, `presassettwo`, `cornerflagpolecolor`, `flamethrowercannon`, `stanchionflamethrower`, `throwerleft`, `throwerright`, `crowdskintonecode`, `crowdregion`, `trainingstadium`, `ethnicity`, `gender`, `personalityid`, `powid`.
+
+**Transfers**: `numtransfersin`.
+
+### 4.7 Tables still relied on but **not present in SBDD** (carry over from prior plan)
+
+These were previously confirmed at the Lua-API level but are **not** in the manually-verified document. They remain tentatively usable, flagged as "API-confirmed, not SBDD-confirmed":
+
+- `career_playercontract` — `playerid`, `contract_status`, `contract_date`, `last_status_change_date`, `duration_months`, `playerrole`. (Used by `extend_user_team_players_contracts.lua`.)
+- Memory-only structures for fixtures / transfer history / negotiations (see `export_fixtures.lua`, `export_transfer_history.lua`).
+
+---
+
+## 5. Folder / Module Structure
 
 ```
 FC26-OTHER-SCRIPTS/
 ├── app/                              # Python desktop application
 │   ├── __init__.py
-│   ├── main.py                       # Entry point
+│   ├── main.py
 │   ├── config/
-│   │   ├── settings.toml             # User settings
-│   │   └── theme.qss                 # Qt stylesheet
+│   │   ├── settings.toml
+│   │   └── theme.qss
 │   ├── core/
 │   │   ├── logging_setup.py
-│   │   ├── paths.py                  # Desktop, cache, config paths
-│   │   └── constants.py              # Column names, enums
+│   │   ├── paths.py
+│   │   └── constants.py              # Column names, enums, thresholds
 │   ├── import_/
-│   │   ├── discovery.py              # Find CSVs on Desktop
-│   │   ├── schema.py                 # Expected columns per CSV type
-│   │   ├── parsers.py                # One parser per CSV kind
-│   │   └── pipeline.py               # Orchestrates the import
+│   │   ├── discovery.py
+│   │   ├── schema.py                 # One schema per CSV kind (SBDD-grounded)
+│   │   ├── parsers.py
+│   │   └── pipeline.py
 │   ├── domain/
 │   │   ├── player.py
 │   │   ├── team.py
 │   │   ├── league.py
+│   │   ├── standings.py
 │   │   ├── season.py
-│   │   ├── fixture.py
 │   │   └── transfer.py
 │   ├── analytics/
-│   │   ├── standings.py              # Points progression, ranking
-│   │   ├── form.py                   # Streaks, form curve
-│   │   ├── scoring.py                # Scoring / defensive trends
-│   │   ├── squad.py                  # Top scorers, ratings, minutes
-│   │   ├── wonderkids.py             # Young high-potential scouting
-│   │   ├── tactics.py                # Formation / efficiency stats
-│   │   └── transfers.py              # Aging, expiring, depth
+│   │   ├── standings.py
+│   │   ├── form.py
+│   │   ├── scoring.py
+│   │   ├── squad.py
+│   │   ├── wonderkids.py
+│   │   ├── tactics.py
+│   │   └── transfers.py
 │   ├── ui/
-│   │   ├── app_window.py             # QMainWindow, sidebar nav
-│   │   ├── theme.py                  # Palette, fonts, spacing tokens
+│   │   ├── app_window.py
+│   │   ├── theme.py
 │   │   ├── widgets/
 │   │   │   ├── stat_card.py
 │   │   │   ├── kpi_tile.py
@@ -148,43 +251,59 @@ FC26-OTHER-SCRIPTS/
 │   │       ├── squad_page.py
 │   │       ├── wonderkids_page.py
 │   │       ├── tactics_page.py
-│   │       └── transfers_page.py
+│   │       ├── transfers_page.py
+│   │       └── import_page.py
 │   └── services/
-│       ├── cache.py                  # SQLite session cache
-│       └── export.py                 # Re-export curated views
+│       ├── cache.py
+│       └── export.py
 │
-├── lua_exports/                      # Lua scripts run inside Live Editor
+├── lua_exports/                      # Production export scripts
 │   ├── README.md
-│   ├── export_season_overview.lua    # Club, league, standings
-│   ├── export_players_snapshot.lua   # Full player attributes
-│   ├── export_season_stats.lua       # (existing — kept as reference)
-│   ├── export_fixtures.lua           # (existing)
-│   ├── export_transfer_history.lua   # (existing)
-│   └── export_wonderkids.lua         # Young high-potential list
+│   ├── export_season_overview.lua
+│   ├── export_players_snapshot.lua
+│   ├── export_wonderkids.lua
+│   ├── export_season_stats.lua       # (moved from SCRIPTS/)
+│   ├── export_fixtures.lua           # (moved from SCRIPTS/)
+│   └── export_transfer_history.lua   # (moved from SCRIPTS/)
 │
-├── SCRIPTS/                          # Existing Lua helpers (reference)
+├── lua_probes/                       # Throwaway probe / discovery scripts
+│   ├── probe_face_aggregates.lua
+│   ├── probe_team_tactics.lua
+│   ├── probe_objectives.lua
+│   └── probe_compobjid_mapping.lua
+│
+├── SCRIPTS/                          # Legacy helpers, reference-only
+│
+├── data/
+│   ├── samples/                      # Sample CSVs for tests/dev
+│   └── exports/                      # (gitignored) user's Desktop exports
+│
 ├── docs/
-│   ├── CSV_CONTRACTS.md              # Column specs for every CSV
-│   └── USER_GUIDE.md
+│   ├── CSV_CONTRACTS.md
+│   ├── USER_GUIDE.md
+│   └── SCHEMA_NOTES.md               # Derived notes on SBDD
+│
 ├── tests/
 │   ├── test_parsers.py
 │   ├── test_analytics_*.py
 │   └── test_pages_smoke.py
-├── PLAN_TECHNIQUE.md                 # (this file)
+│
+├── Structure Base de Données FC 26.md
+├── Guide des Regens FC26.md
+├── PLAN_TECHNIQUE.md
+├── ROADMAP.md
 └── requirements.txt
 ```
 
 ---
 
-## 5. Data Flow
+## 6. Data Flow
 
 ```
 Lua export scripts  ──►  CSV files on Desktop
                               │
                               ▼
                      [ Import pipeline ]
-                              │
-             schema validation + type coercion
                               │
                               ▼
                   [ Domain model objects ]
@@ -200,295 +319,291 @@ Lua export scripts  ──►  CSV files on Desktop
 ```
 
 Rules:
-- **Parsers never know about the UI.** They return dataframes / domain objects only.
-- **Analytics never know about CSV formats.** They operate on domain objects.
-- **UI never reads CSVs directly.** It requests data from viewmodels.
+- Parsers never know about the UI.
+- Analytics never know about CSV formats.
+- UI never reads CSVs directly.
 
 ---
 
-## 6. CSV Import Pipeline
+## 7. CSV Contracts (SBDD-grounded)
 
-### 6.1 Discovery
+Every CSV kind below has a frozen column list. Extra columns are tolerated; missing required columns error.
 
-- Default scan location: `%USERPROFILE%\Desktop\` (matches the Lua scripts' output path).
-- Filename patterns recognised:
-  - `SEASON_OVERVIEW_DD_MM_YYYY.csv`
-  - `PLAYERS_SNAPSHOT_DD_MM_YYYY.csv`
-  - `SEASON_STATS_DD_MM_YYYY.csv`
-  - `FIXTURES_<competition>_DD_MM_YYYY.csv`
-  - `TRANSFER_HISTORY_DD_MM_YYYY.csv`
-  - `WONDERKIDS_DD_MM_YYYY.csv`
-- The user can also pick a folder manually.
+### 7.1 `SEASON_OVERVIEW_DD_MM_YYYY.csv`
 
-### 6.2 Schema detection
+**Source (Lua)**: `leagueteamlinks` (filtered to user team) + `leagues` + `teams`.
+**One row per (user team × current league)**.
 
-Each CSV kind has an explicit expected-columns list in `app/import_/schema.py`. On import:
+Columns:
+```
+export_date, season_year,
+user_teamid, user_teamname,
+leagueid, leaguename, league_level, leaguetype,
+currenttableposition, previousyeartableposition,
+points, nummatchesplayed,
+homewins, homedraws, homelosses, awaywins, awaydraws, awaylosses,
+homegf, homega, awaygf, awayga,
+teamform, teamshortform, teamlongform, lastgameresult,
+unbeatenhome, unbeatenaway, unbeatenleague, unbeatenallcomps,
+objective, hasachievedobjective, highestpossible, highestprobable,
+yettowin, actualvsexpectations, champion,
+team_overallrating, team_attackrating, team_midfieldrating, team_defenserating,
+buildupplay, defensivedepth,
+captainid, penaltytakerid, freekicktakerid,
+leftcornerkicktakerid, rightcornerkicktakerid,
+longkicktakerid, leftfreekicktakerid, rightfreekicktakerid,
+favoriteteamsheetid,
+teamstadiumcapacity, clubworth, domesticprestige, internationalprestige
+```
 
-1. Read the header row.
-2. Match against known schemas (permissive — extra columns allowed, missing required columns → error).
-3. Route to the correct parser.
+### 7.2 `STANDINGS_<league>_DD_MM_YYYY.csv`
 
-### 6.3 Parsing
+**Source**: `leagueteamlinks` WHERE `leagueid = <league>` JOIN `teams`.
+**One row per team in the league.**
 
-- Use `pandas.read_csv(..., dtype=<explicit map>)` to avoid inference surprises.
-- Coerce dates via helpers (Lua `birthdate` is in Gregorian days — convert using a known FC26 epoch once parsed; leave raw column preserved).
-- Normalize IDs to `Int64` (nullable) rather than `float`.
+Columns:
+```
+export_date, leagueid, leaguename, teamid, teamname,
+currenttableposition, previousyeartableposition, points, nummatchesplayed,
+homewins, homedraws, homelosses, awaywins, awaydraws, awaylosses,
+homegf, homega, awaygf, awayga,
+teamform, teamlongform, lastgameresult,
+unbeatenleague, champion,
+team_overallrating
+```
 
-### 6.4 Validation
+### 7.3 `PLAYERS_SNAPSHOT_DD_MM_YYYY.csv`
 
-- Report per-file status: rows read, rows dropped, missing columns.
-- Non-fatal issues surface as a toast; fatal ones block the import and show a clear message.
+**Source**: full pass over `players`, JOIN `teamplayerlinks` on `playerid`, JOIN `teams` on `teamid`, JOIN `leagueteamlinks` to find `leagueid`, JOIN `playernames` ×4 for names.
 
-### 6.5 Caching
+One row per player.
 
-- After a successful import, write the parsed tables to `%LOCALAPPDATA%\FC26Analytics\cache\session.sqlite`.
-- On next launch, offer "reopen last session" without re-parsing.
+Columns (frozen):
+```
+export_date,
+playerid, is_generated,
+firstname, lastname, commonname, display_name, jerseyname,
+birthdate, age, nationality, gender,
+preferredfoot,
+preferredposition1, preferredposition2, preferredposition3,
+preferredposition4, preferredposition5, preferredposition6, preferredposition7,
+role1, role2, role3, role4, role5,
+overallrating, potential, internationalrep,
+pacdiv, shohan, paskic, driref, defspe, phypos,
+# GK
+gkdiving, gkhandling, gkkicking, gkpositioning, gkreflexes,
+# ATT
+crossing, finishing, headingaccuracy, shortpassing, volleys,
+# DEF
+defensiveawareness, standingtackle, slidingtackle,
+# SKL
+dribbling, curve, freekickaccuracy, longpassing, ballcontrol,
+# PWR
+shotpower, jumping, stamina, strength, longshots,
+# MOV
+acceleration, sprintspeed, agility, reactions, balance,
+# MEN
+aggression, composure, interceptions, positioning, vision, penalties,
+trait1, trait2, icontrait1, icontrait2,
+skillmoves, skillmoveslikelihood, weakfootabilitytypecode,
+height, weight,
+contractvaliduntil, playerjointeamdate,
+isretiring,
+# club + league (from teamplayerlinks → teams → leagueteamlinks)
+teamid, teamname, jerseynumber, squad_position,
+leagueid, leaguename, league_level,
+# per-team in-season stats
+form, injury,
+leagueappearances, leaguegoals,
+leaguegoalsprevmatch, leaguegoalsprevthreematches,
+yellows, reds,
+istopscorer, isamongtopscorers, isamongtopscorersinteam
+```
+
+Notes:
+- `display_name` is resolved in Lua (prefer `commonname` → `firstname + " " + lastname` → `jerseyname`).
+- `age` is computed in Lua from `birthdate` and `GetCurrentDate()`.
+- `is_generated` = `playerid >= 460000`.
+
+### 7.4 `WONDERKIDS_DD_MM_YYYY.csv`
+
+Same columns as PLAYERS_SNAPSHOT **filtered** to `age <= 21 AND potential >= POTENTIAL_MIN` (default 85, parameterized).
+
+### 7.5 `SEASON_STATS_DD_MM_YYYY.csv` (existing)
+
+Unchanged. Columns per `export_season_stats.lua`: `playerid, app, goals, assists, yellow, two_yellow, red, saves, goals_conceded, clean_sheets, motm, avg, compobjid, compname`.
+
+### 7.6 `FIXTURES_<competition>_DD_MM_YYYY.csv` (existing)
+
+Unchanged (memory-sourced).
+
+### 7.7 `TRANSFER_HISTORY_DD_MM_YYYY.csv` (existing)
+
+Unchanged (memory-sourced).
 
 ---
 
-## 7. Parsing Engine Details
+## 8. Parsing Engine Details
 
-Separate parser per CSV kind. Each returns a typed dataframe and a small metadata dict (season, export date, source filename).
+One parser per CSV kind. Each returns `ParsedCSV(df, metadata)` where metadata carries `season`, `export_date`, `source_filename`, `kind`.
 
 | Parser | Source CSV | Produces |
 |--------|-----------|----------|
-| `parse_season_overview` | SEASON_OVERVIEW | Club + current standings row |
-| `parse_players_snapshot` | PLAYERS_SNAPSHOT | Player attribute table |
-| `parse_season_stats` | SEASON_STATS | Per-player per-competition match stats |
-| `parse_fixtures` | FIXTURES_* | Fixture list per competition |
+| `parse_season_overview` | SEASON_OVERVIEW | Club + league + standings row (user team) |
+| `parse_standings` | STANDINGS_* | Full league table |
+| `parse_players_snapshot` | PLAYERS_SNAPSHOT | Player table |
+| `parse_wonderkids` | WONDERKIDS | Filtered player table |
+| `parse_season_stats` | SEASON_STATS | Per-player per-competition stats |
+| `parse_fixtures` | FIXTURES_* | Fixtures per competition |
 | `parse_transfer_history` | TRANSFER_HISTORY | Transfers + loans |
-| `parse_wonderkids` | WONDERKIDS | Young high-potential candidates |
 
-All parsers share a common base: `BaseParser.parse(path) -> ParsedCSV`.
+All parsers share a base `BaseParser.parse(path) -> ParsedCSV`.
 
----
-
-## 8. Analytics Engine
-
-### 8.1 Standings & season progression
-
-Inputs: FIXTURES_* + SEASON_OVERVIEW.
-Outputs: points-per-matchday series, league-position-per-matchday series, GF/GA running totals, goal difference curve.
-
-### 8.2 Form & streaks
-
-Inputs: FIXTURES_* filtered to user club.
-Outputs: last-N results (W/D/L), current streak, longest unbeaten run, home/away split.
-
-### 8.3 Squad performance
-
-Inputs: SEASON_STATS + PLAYERS_SNAPSHOT.
-Outputs: top scorers, assists, appearances, avg rating, clean sheets (GKs), minutes played, injury flags (if present).
-
-### 8.4 Player development trend
-
-Requires multiple PLAYERS_SNAPSHOT imports from different dates.
-Outputs: OVR / potential delta per player between snapshots.
-
-### 8.5 Wonderkids
-
-Inputs: PLAYERS_SNAPSHOT.
-Logic: filter by age ≤ 21 and `potential >= threshold` (default 85; user-tunable).
-Outputs: ranked list with age, OVR, potential, club, league, origin flag (real vs generated via `playerid` threshold — already confirmed: `>= 460000` = generated).
-
-### 8.6 Tactical stats
-
-Inputs: SEASON_OVERVIEW + aggregated FIXTURES / SEASON_STATS.
-Derived metrics: goals per match, goals conceded per match, clean-sheet ratio, simple "finishing efficiency" proxy = goals / shots if shots exported (see Points to Verify).
-
-### 8.7 Transfer planning
-
-Inputs: PLAYERS_SNAPSHOT + (optional) contract CSV.
-Outputs: aging list (age × OVR quadrant), expiring contracts (by `contractvaliduntil` vs current season year), position depth chart, replacement suggestions (same position, younger, similar or better OVR/potential).
+Type-coercion rules:
+- IDs → `Int64` (nullable).
+- Dates (`birthdate`, `playerjointeamdate`, `contractvaliduntil`) kept as raw ints AND as a `datetime64` sibling column.
+- Names → `string` dtype.
+- Booleans (`isretiring`, `champion`, `istopscorer`, …) → `bool`.
 
 ---
 
-## 9. Chart & Visualization Modules
+## 9. Analytics Engine
 
-All charts wrap **PyQtGraph** and expose a uniform API:
+### 9.1 Standings & season progression
+Inputs: SEASON_OVERVIEW + STANDINGS_* (+ FIXTURES_* if available).
+Outputs: points-per-matchday, position-per-matchday, GF/GA running totals, GD curve, home/away split breakdowns.
 
-```
-ChartPanel(title, subtitle, x_axis, y_axis, series[])
-```
+### 9.2 Form & streaks
+Primary source: `teamform` / `teamlongform` / `teamshortform` / `lastgameresult` / `unbeaten*` from SEASON_OVERVIEW.
+Secondary source (if FIXTURES_* present): exact W/D/L history.
 
-Chart types provided:
+### 9.3 Squad performance
+Inputs: PLAYERS_SNAPSHOT (form/injury/goals/appearances from `teamplayerlinks`) + SEASON_STATS.
+Outputs: top scorers (verified via `istopscorer`), assists, appearances, avg rating, clean sheets (GKs), injury flags, yellow/red discipline.
+
+### 9.4 Player development trend
+Requires ≥2 PLAYERS_SNAPSHOTs from different dates.
+Outputs: OVR/potential delta per player; attribute-group deltas.
+
+### 9.5 Wonderkids
+Filter: `age <= 21 AND potential >= threshold`.
+Outputs: ranked list with origin badge (real vs generated via `playerid` threshold), quadrant scatter (age × potential).
+
+### 9.6 Tactical stats
+Inputs: SEASON_OVERVIEW (`buildupplay`, `defensivedepth`, team ratings), STANDINGS_* (home/away splits).
+Outputs:
+- goals per match (home vs away),
+- goals conceded per match (home vs away),
+- clean-sheet ratio (needs SEASON_STATS cross-reference for GK),
+- "buildup style" and "defensive line" readouts directly from the team row.
+Formation visual remains gated on §16.3 resolution.
+
+### 9.7 Transfer planning
+Inputs: PLAYERS_SNAPSHOT (+ TRANSFER_HISTORY optional).
+Outputs: age × OVR quadrant, expiring contracts (`contractvaliduntil` vs current season year), positional depth chart, replacement finder.
+
+---
+
+## 10. Chart & Visualization Modules
+
+All charts wrap **PyQtGraph** behind `ChartPanel(title, subtitle, x_axis, y_axis, series[])`.
 
 | Module | Chart type | Used on |
 |--------|-----------|---------|
-| `line_chart.py` | Line + area | Points progression, ranking evolution, form curve |
-| `bar_chart.py` | Vertical / horizontal bars | Top scorers, assists, appearances |
-| `stacked_bar.py` | Stacked bars | W/D/L per month, home vs away GF/GA |
-| `radar_chart.py` | Radar | Player attribute profile (PAC/SHO/PAS/DRI/DEF/PHY) |
-| `sparkline.py` | Inline mini chart | KPI tiles, table cells |
-| `heatmap.py` | Position / depth heatmap | Tactical + squad depth views |
-| `scatter.py` | Scatter | Age × potential (wonderkids), age × OVR (aging) |
+| `line_chart` | Line + area | Points / ranking / form curve |
+| `bar_chart` | Bars H/V | Top scorers, assists, appearances |
+| `stacked_bar` | Stacked | W/D/L per month, home vs away GF/GA |
+| `radar_chart` | Radar | Player attribute profile (6 groups) |
+| `sparkline` | Inline mini | KPI tiles, table cells |
+| `heatmap` | Grid | Tactical / depth views |
+| `scatter` | Scatter | Age × potential / age × OVR |
 
-Theming: every chart reads colors from a single palette in `ui/theme.py` (primary, success, warn, danger, neutral, subtle grid).
-
----
-
-## 10. Wonderkid Scouting Module
-
-Dedicated page and dedicated export script.
-
-### 10.1 Lua export (`export_wonderkids.lua`)
-
-Single-pass over `players` table, writing rows where:
-- `age <= 21` (computed from `birthdate` + `GetCurrentDate()` — pattern confirmed in `mass_edit_age.lua`)
-- `potential >= POTENTIAL_MIN` (parameter, default 85)
-
-Columns: `playerid, name, club, league, nationality, age, birthdate, preferredposition1, preferredposition2, overallrating, potential, is_generated, trait1, trait2, skillmoves, weakfootabilitytypecode` plus the full attribute set already confirmed in `99ovr_99pot.lua`.
-
-### 10.2 Python page
-
-- Sortable, filterable table (age, potential, position, league, nationality, real vs generated).
-- Quadrant scatter: age (x) × potential (y), colored by position group.
-- Per-player drawer: radar of 6 attribute groups + raw attribute list.
-- "Origin type" badge: `real` vs `generated` — derived purely from `playerid >= 460000` threshold (confirmed in `delete_generated_players.lua` and `list_players.lua`).
+Theming from a single palette (`ui/theme.py`).
 
 ---
 
-## 11. UI / Page Architecture
+## 11. Wonderkid Scouting Module
 
-### 11.1 Shell
+See §9.5 for logic and §7.4 for CSV contract.
+
+- Sortable/filterable table (age, potential, position, league, nationality, real vs generated).
+- Quadrant scatter: age × potential colored by position group (derived from `preferredposition1`).
+- Per-player drawer: radar (pacdiv/shohan/paskic/driref/defspe/phypos once resolved; raw attribute list otherwise) + full attribute list.
+- Origin badge: `real` vs `generated` via `playerid >= 460000`.
+
+---
+
+## 12. UI / Page Architecture
+
+### 12.1 Shell
 
 `QMainWindow` with:
-- **Left sidebar** — collapsible nav: Overview, Analytics, Squad, Wonderkids, Tactics, Transfers, Import.
-- **Top bar** — current season, current club, global filter, import button, theme toggle.
+- **Left sidebar** — Overview, Analytics, Squad, Wonderkids, Tactics, Transfers, Import.
+- **Top bar** — season, club, global filter, import, theme toggle.
 - **Central stack** — one page per section.
 - **Status bar** — last import timestamp, row counts, log indicator.
 
-### 11.2 Pages
+### 12.2 Pages
 
-#### 11.2.1 Season Overview
-Hero header with club crest (optional), season label, league + position.
-KPI grid (3×3): Points · Wins · Draws · Losses · GF · GA · GD · Recent Form (5-game dots) · Objectives progress.
-Each KPI tile uses a sparkline for its trend.
+**Season Overview** — hero header, KPI grid (Points / W / D / L / GF / GA / GD / Recent Form / Objective progress via `hasachievedobjective` + `actualvsexpectations`), sparkline per KPI.
 
-#### 11.2.2 Season Analytics
-Full-page grid of charts:
-- Points progression (line)
-- Ranking evolution (line, inverted Y)
-- Scoring trend (bar + line overlay)
-- Defensive trend (bar + line overlay)
-- Form curve (moving average)
-- Streaks panel (textual + color coded)
+**Season Analytics** — points progression, ranking evolution (inverted Y), scoring trend, defensive trend, form curve, streaks panel (`unbeaten*`).
 
-#### 11.2.3 Squad Performance
-Top-N leaderboards as horizontal bar charts:
-- Top scorers, assists, appearances, ratings, clean sheets.
-Filter bar: competition, position, minimum minutes.
-Per-player drawer: development trend (if multi-snapshot), radar, match log.
+**Squad Performance** — Top-N leaderboards (scorers/assists/apps/ratings/clean sheets); filter bar (competition/position/min minutes); per-player drawer with development trend (if multi-snapshot), radar, match log; inline `form` + `injury` badges.
 
-#### 11.2.4 Wonderkid Scout Hub
-See §10.2.
+**Wonderkid Scout Hub** — §11.
 
-#### 11.2.5 Tactical Dashboard
-- Formation visual (pitch diagram with 11 slots; input from user-selected starting XI).
-- KPI tiles: possession, pass accuracy, finishing efficiency, defensive solidity.
-*(All four metrics depend on fields we have not yet confirmed — see "Points to Verify".)*
+**Tactical Dashboard** — team ratings bars (overall/attack/midfield/defense, plus matchday variants); `buildupplay` / `defensivedepth` gauges; home vs away finishing/defensive efficiency. Formation pitch deferred (§16.3).
 
-#### 11.2.6 Transfer Planning
-- Aging quadrant (scatter).
-- Expiring contracts table with years-left.
-- Replacement finder — select a player, get ranked candidates (same position, younger, similar OVR/potential).
-- Positional depth bar chart.
+**Transfer Planning** — aging quadrant, expiring contracts table (years-left from `contractvaliduntil`), replacement finder, depth bar chart, incoming transfers counter from `teams.numtransfersin`.
 
-#### 11.2.7 Import Page
-- Drag-and-drop zone + file picker.
-- Detected files list with status icons.
-- Parse log.
-- "Clear cache" control.
+**Import Page** — drag/drop zone, detected files list, parse log, clear-cache.
 
-### 11.3 Design tokens
+### 12.3 Design tokens
 
-- **Typography**: single font family (Inter or system default), 4 sizes.
+- **Typography**: Inter or system default, 4 sizes.
 - **Spacing**: 4/8/12/16/24/32 px scale.
 - **Radii**: 6 / 10 / 14 px.
-- **Palette**: dark theme by default, light theme toggle. Semantic tokens only (never hex in pages).
+- **Palette**: dark theme default, light toggle. Semantic tokens only.
 
 ---
 
-## 12. Export-Script Workflow (Lua side)
+## 13. Export-Script Workflow (Lua side)
 
-### 12.1 Guiding rule — never invent API calls
+### 13.1 Guiding rule
+Only use methods already confirmed. Anything else goes to `lua_probes/` and is pcall-guarded.
 
-**Every Lua export script must use ONLY methods already confirmed.** Anything else goes to "Points to Verify" and is tested with `pcall` in a throwaway script before being used in production.
-
-### 12.2 Confirmed Live Editor API (inherited from the prior plan + script analysis)
+### 13.2 Confirmed Live Editor API (inherited; unchanged)
 
 #### Table access
-- `LE.db:GetTable("players")`
-- `LE.db:GetTable("teamplayerlinks")`
-- `LE.db:GetTable("teams")`
-- `LE.db:GetTable("career_playercontract")`
-- `LE.db:GetTable("leagues")` *(confirmed 16/04/2026 via `discover_league_columns.lua`)*
-- `LE.db:GetTable("leagueteamlinks")` *(confirmed same date)*
+- `LE.db:GetTable("players")`, `"teamplayerlinks"`, `"teams"`, `"leagues"`, `"leagueteamlinks"`, `"career_playercontract"`, **`"playernames"`** (newly-documented, SBDD-confirmed).
 
 #### Record iteration
-- `table:GetFirstRecord()`
-- `table:GetNextValidRecord()`
-- `table:GetRecordFieldValue(record, "field")`
-- `table:SetRecordFieldValue(record, "field", value)`
+- `table:GetFirstRecord()`, `table:GetNextValidRecord()`, `table:GetRecordFieldValue(record, "field")`, `table:SetRecordFieldValue(record, "field", value)`.
 
-#### Confirmed `players` fields
-Identity/meta: `playerid`, `birthdate`, `nationality`, `isretiring`, `height`, `preferredposition1`, `preferredposition2`, `preferredfoot`, `modifier`, `contractvaliduntil`, `hashighqualityhead`, `headclasscode`, `headassetid`.
-Attributes (full list confirmed via `99ovr_99pot.lua`):
-- GK: `gkdiving`, `gkhandling`, `gkkicking`, `gkpositioning`, `gkreflexes`
-- ATT: `crossing`, `finishing`, `headingaccuracy`, `shortpassing`, `volleys`
-- DEF: `defensiveawareness`, `standingtackle`, `slidingtackle`
-- SKL: `dribbling`, `curve`, `freekickaccuracy`, `longpassing`, `ballcontrol`
-- PWR: `shotpower`, `jumping`, `stamina`, `strength`, `longshots`
-- MOV: `acceleration`, `sprintspeed`, `agility`, `reactions`, `balance`
-- MEN: `aggression`, `composure`, `interceptions`, `positioning`, `vision`, `penalties`
-- Global: `overallrating`, `potential`
-Playstyles: `trait1`, `trait2`, `icontrait1`, `icontrait2`, `skillmoves`, `weakfootabilitytypecode`.
+#### Helpers (from prior confirmations)
+- `GetPlayerName(playerid)` — slow.
+- `GetTeamName(teamid)`, `GetTeamIdFromPlayerId(playerid)`, `GetPlayerIDSForTeam(teamid)`.
+- `GetUserSeniorTeamPlayerIDs()`, `GetUserTeamID()`.
+- `GetCurrentDate()` → `{day, month, year}`, `:ToInt()`.
+- `GetPlayerPrimaryPositionName(code)`.
+- `GetCompetitionNameByObjID(id)`.
+- `GetPlayersStats()`.
+- `GetCMEventNameByID(id)`, `AddEventHandler("pre__CareerModeEvent", cb)`, `IsInCM()`.
+- `PlayerHasDevelopementPlan(playerid)`, `PlayerSetValueInDevelopementPlan(...)`.
+- `MessageBox`, `Log`, `LOGGER:LogInfo`, `LOGGER:LogError`.
 
-#### Confirmed `teamplayerlinks` fields
-`playerid`, `teamid`, `jerseynumber`.
+#### DATE class
+`DATE:new()`, `:FromGregorianDays(days)`, `:ToGregorianDays()`, `:FromInt()`, `:ToInt()`, `:ToString()`; fields `.year / .month / .day`.
 
-#### Confirmed `career_playercontract` fields
-`playerid`, `contract_status`, `contract_date`, `last_status_change_date`, `duration_months`, `playerrole`.
+#### Memory helpers (advanced, reference-only)
+`MEMORY:ReadPointer / ReadInt / ReadShort / ReadChar / ReadBool / ReadMultilevelPointer`.
 
-#### Confirmed `leagues` / `leagueteamlinks` fields
-Per `discover_league_columns.lua` (2026-04-16):
-- `leagues`: `leagueid`, `leaguename`, `countryid`, `level`, `leaguetype`, …
-- `leagueteamlinks`: `leagueid`, `teamid`, `points`, `currenttableposition`, `nummatchesplayed`, `homewins/losses/draws`, `awaywins/losses/draws`, `homegf/ga`, `awaygf/ga`, `teamform`, `teamshortform`, `teamlongform`, `lastgameresult`, `unbeatenleague`, `unbeatenaway`, `unbeatenallcomps`, `champion`, `objective`.
+#### Constants (confirmed)
+- `playerid >= 460000` = generated, `< 460000` = real.
+- Contract statuses `1 / 3 / 5` → loaned-in.
 
-#### Confirmed helper functions
-- `GetPlayerName(playerid)` — slow; call only on needed subset.
-- `GetTeamName(teamid)`
-- `GetTeamIdFromPlayerId(playerid)`
-- `GetPlayerIDSForTeam(teamid)`
-- `GetUserSeniorTeamPlayerIDs()`
-- `GetUserTeamID()`
-- `GetCurrentDate()` → `{day, month, year}`, with `:ToInt()` (per `extend_user_team_players_contracts.lua`).
-- `GetPlayerPrimaryPositionName(code)`
-- `GetCompetitionNameByObjID(id)`
-- `GetPlayersStats()` — returns per-player per-competition match-stat table.
-- `GetCMEventNameByID(id)` (per `track_cm_events.lua`)
-- `IsInCM()`
-- `PlayerHasDevelopementPlan(playerid)` (per `99ovr_99pot.lua`)
-- `PlayerSetValueInDevelopementPlan(playerid, field, value)`
-- `MessageBox(title, msg)`
-- `Log(msg)` / `LOGGER:LogInfo(msg)` / `LOGGER:LogError(msg)`
-- `AddEventHandler("pre__CareerModeEvent", cb)` (per `track_cm_events.lua`)
-
-#### Confirmed DATE class
-`DATE:new()`, `:FromGregorianDays(days)`, `:ToGregorianDays()`, `:FromInt(int)`, `:ToInt()`, `:ToString()`, fields `.year / .month / .day`.
-
-#### Confirmed memory helpers (advanced scripts only)
-`MEMORY:ReadPointer`, `ReadInt`, `ReadShort`, `ReadChar`, `ReadBool`, `ReadMultilevelPointer`. Used in `export_fixtures.lua` and `export_transfer_history.lua` for in-memory structures (standings, fixtures, negotiations). These are **reference-only** — do not extend without verification.
-
-#### Confirmed import modules
-`imports/other/helpers`, `imports/career_mode/helpers`, `imports/career_mode/enums`, `imports/services/enums`, `imports/core/date`, `imports/core/common`, `imports/core/memory`, `imports/other/playstyles_enum`.
-
-#### Confirmed constants
-- `playerid >= 460000` → generated player.
-- `playerid < 460000` → real (original DB) player.
-- Contract statuses `1 / 3 / 5` → loaned-in (per `extend_user_team_players_contracts.lua`).
-
-### 12.3 CSV writing pattern (confirmed, reused verbatim)
+### 13.3 CSV writing pattern
 ```lua
 local desktop_path = string.format("%s\\Desktop", os.getenv('USERPROFILE'))
 local d = GetCurrentDate()
@@ -500,104 +615,96 @@ io.write(table.concat(columns, ",")); io.write("\n")
 io.close(f)
 ```
 
-### 12.4 New scripts to produce (planning only — not to implement yet)
-- `export_season_overview.lua` — user club, league, standings row from `leagueteamlinks`.
-- `export_players_snapshot.lua` — full attribute dump, one row per player.
-- `export_wonderkids.lua` — filtered subset (age ≤ 21, potential ≥ threshold).
+### 13.4 New production scripts
+- `export_season_overview.lua` — §7.1.
+- `export_standings.lua` — §7.2, one file per league the user cares about.
+- `export_players_snapshot.lua` — §7.3.
+- `export_wonderkids.lua` — §7.4.
 
-All three should:
-1. `assert(IsInCM())` upfront.
-2. Single pass over `players`.
-3. Lazy `GetPlayerName` / `GetTeamName` calls only on retained rows.
-4. `pcall` around any field listed in "Points to Verify".
-
----
-
-## 13. Scalability Considerations
-
-- **Player table size**: tens of thousands of rows. Single pass in Lua; pandas handles the rest trivially.
-- **Multiple snapshots**: the app stores each imported CSV as a separate row in the session cache keyed by export date → supports multi-season / multi-snapshot comparisons without reloading.
-- **Chart density**: PyQtGraph scales to tens of thousands of points; downsample in analytics layer if a chart exceeds 5k visible points.
-- **Memory**: keep raw dataframes; derive lazily. Cache derived views in viewmodels with invalidation on new import.
-- **Future data growth**: if any single CSV exceeds ~200 MB, move that parser to `polars` or chunked reads — the parser interface is already abstracted for this.
+Every script:
+1. `assert(IsInCM())`.
+2. Build a cache of `playernames` (single full scan → Lua table keyed by `nameid`) before the main loop.
+3. Single pass over `players`, lazy name resolution via the cache (no `GetPlayerName` calls).
+4. `pcall` any field flagged in §16.
+5. Escape CSV commas/quotes in string columns.
 
 ---
 
-## 14. Error Handling
+## 14. Scalability, Error Handling, Extensibility
 
-- **Parser layer**: raise typed exceptions (`MissingColumnError`, `SchemaMismatchError`, `EmptyFileError`). Pipeline catches and reports per-file.
-- **Analytics layer**: pure functions; assume validated input; any missing optional field returns `None` and the UI renders "—".
-- **UI layer**: global `QErrorMessage` for fatal errors; inline toasts for recoverable ones.
-- **Logging**: rotating file log at `%LOCALAPPDATA%\FC26Analytics\logs\app.log`. Every import and every unhandled exception logged with stack trace.
-- **User-visible rule**: the app never crashes silently; every failure produces either a toast or a modal.
+### 14.1 Scalability
+- `players` ≈ tens of thousands of rows: single Lua pass; pandas handles rest.
+- Each imported CSV stored in session cache keyed by `(kind, export_date)` → multi-snapshot comparisons trivial.
+- Downsample in the analytics layer when a chart exceeds 5k visible points.
+- Parser interface is chunkable → migrate to polars only if a CSV exceeds ~200 MB.
 
----
+### 14.2 Error handling
+- Typed exceptions: `MissingColumnError`, `SchemaMismatchError`, `EmptyFileError`.
+- UI: `QErrorMessage` for fatal, toasts for recoverable.
+- Rotating file log at `%LOCALAPPDATA%\FC26Analytics\logs\app.log`.
+- Never crash silently.
 
-## 15. Future Extensibility
-
-- **Plugin-style analytics**: each analytics module registers via a small registry → new modules drop-in without UI changes.
-- **Additional CSV kinds**: adding a new CSV means one new schema entry + one new parser + optional new page.
-- **Multi-save comparison**: with the snapshot cache already keyed by date, comparing two seasons or two careers is mostly a UI exercise.
-- **i18n**: wrap all user-facing strings through a `tr()` helper from the start (Qt provides this natively).
-- **Theme packs**: palette already tokenized — new themes are pure QSS + color-token files.
-- **Alternative data sources**: the domain layer is CSV-agnostic — if EA ever ships an official export, swap parsers only.
-
----
-
-## 16. Points to Verify — Unconfirmed Methods / Data Access Requirements
-
-> **Critical rule** — nothing below is to be used in production scripts until it has been validated with a throwaway `pcall`-guarded test script. The Live Editor engine is very sensitive; guessing fields crashes it.
-
-### 16.1 `players` table — unverified fields
-| Field | Needed for | Status |
-|-------|-----------|--------|
-| `firstname`, `lastname`, `commonname` | Splitting player name without `GetPlayerName()` | **Unverified** — no existing script reads them. Fallback: `GetPlayerName()` only. |
-| `preferredposition3`, `preferredposition4` | Position flexibility analytics | **Unverified**. PS_V2 only reads position1/2. |
-| `age` | Direct age read | **Unverified / likely absent**. Compute from `birthdate` instead (confirmed pattern). |
-| `injury*` related fields | Squad "injuries" KPI | **Unverified** — no existing script accesses them. |
-| `fitness`, `form`, `morale`, `sharpness` | Tactical + squad trends | **Needs verification.** `auto_max_user_team_*` scripts exist — names suggest these fields exist but confirmation from those scripts' content is pending. |
-| `shots`, `shotsontarget`, `passes` per match | Finishing efficiency, pass accuracy | **Unverified.** May not exist in `players`; probably elsewhere if at all. |
-
-### 16.2 `GetPlayersStats()` — field coverage
-`export_season_stats.lua` confirms: `playerid`, `app`, `goals`, `assists`, `yellow`, `two_yellow`, `red`, `saves`, `goals_conceded`, `clean_sheets`, `motm`, `avg`, `compobjid`, `compname`.
-**Unverified**: shots, key passes, pass accuracy, possession contribution, distance covered, xG — any richer per-match telemetry. Document-as-absent until proven otherwise.
-
-### 16.3 Team-level tactical data
-| Need | Status |
-|------|--------|
-| Formation / tactical preset per team | **Unverified.** No existing script reads a "formation" column. May require a different table (e.g., `team_tactics`, `formations`) that must be discovered via a `discover_*.lua` probe. |
-| Possession / pass accuracy aggregates | **Unverified.** Likely not in `players` or `leagueteamlinks`. Source unknown. |
-
-### 16.4 Objectives progress (for Season Overview)
-**Unverified.** `leagueteamlinks.objective` exists — semantics unclear (integer? bitmask? reference into another table?). Needs a small probe script to dump a few sample values for the user's team.
-
-### 16.5 Contract / transfer fee data at rest
-`career_playercontract` has `duration_months` and dates but **no salary/wage field is confirmed**. Salary / release-clause / weekly-wage fields: **unverified** — probably in a different table.
-
-### 16.6 Fixtures outside memory
-`export_fixtures.lua` reads fixtures from in-memory structures via `MEMORY:*`. **No confirmed DB table for fixtures**. If a CSV of fixtures is wanted without memory reads, this is an open question.
-
-### 16.7 Regen / generated-player origin tagging
-Only the numeric threshold (`playerid >= 460000`) is confirmed. **No field** tells us whether a generated player is a youth-academy intake vs a regen vs a free-agent refill — do not invent one.
-
-### 16.8 Competition / league metadata
-- Mapping `compobjid` (from `GetPlayersStats`) → league is not obviously the same identifier as `leagueid` in `leagues`. **Needs verification** before cross-joining season-stats with league standings.
-
-### 16.9 Python-side items to decide (non-Lua)
-- Packaging tool: PyInstaller vs Briefcase.
-- Charting fallback: whether QtCharts is actually needed or PyQtGraph covers every chart type.
-- Whether the SQLite cache should be a single file per career save or rolling.
+### 14.3 Extensibility
+- Analytics modules register via a small registry.
+- New CSV kind = 1 schema entry + 1 parser + optional page.
+- i18n via `tr()` from day one.
+- Palette tokenized for theme packs.
 
 ---
 
-## 17. Review Checklist Before Starting Development
+## 15. Points to Verify — Remaining Uncertainties
 
-- [ ] User reviews §16 and runs probe scripts for any field they want used.
-- [ ] User confirms CSV column contracts in `docs/CSV_CONTRACTS.md` (to be drafted).
-- [ ] Decision on packaging tool.
+SBDD eliminated most prior unknowns. The remaining items:
+
+### 15.1 Player string-name fields
+**Resolved by SBDD**: `players` holds `firstnameid` / `lastnameid` / `commonnameid` / `playerjerseynameid`; strings live in `playernames.name`. Resolution strategy: build a Lua-side `nameid → name` cache, then join.
+**Unverified**: whether `playernames` contains entries for every ID used by `players` (i.e. no dangling FKs). → Probe: `probe_names_integrity.lua` dumps counts of unresolved IDs.
+
+### 15.2 Face-aggregate attributes
+SBDD lists `pacdiv`, `shohan`, `paskic`, `driref`, `defspe`, `phypos` on `players`. Naming strongly suggests the 6 front-face stats (PAC/SHO/PAS/DRI/DEF/PHY) **but encoding is unverified** (integer? packed?).
+**Action**: `probe_face_aggregates.lua` — dump these 6 fields for 20 known players and compare to the in-game card.
+
+### 15.3 Per-player form / injury semantics
+`teamplayerlinks.form` and `teamplayerlinks.injury` confirmed **present**, but the value encoding is unverified (scale? enum?).
+**Action**: `probe_form_injury.lua` — dump distribution and sample known-injured players.
+
+### 15.4 Team tactics / formation
+`teams.favoriteteamsheetid` is a pointer. The target table is **not** in SBDD.
+**Action**: `probe_team_tactics.lua` — try `LE.db:GetTable("teamsheets")`, `"formations"`, `"teamformations"` with `pcall`.
+
+### 15.5 Objectives semantics
+Fields exist in `leagueteamlinks`. Numeric semantics of `objective` / `actualvsexpectations` / `highestprobable` unverified.
+**Action**: `probe_objectives.lua` — dump user team's row + 3 rival teams' rows; compare to known in-game objective.
+
+### 15.6 `compobjid` vs `leagueid`
+`GetPlayersStats()` returns `compobjid`; `leagues.leagueid` exists. Mapping unverified.
+**Action**: `probe_compobjid_mapping.lua` — cross-reference the user's domestic league.
+
+### 15.7 Contract / wage
+`career_playercontract` has no salary field in any confirmed artefact. Salary / release-clause data source unknown.
+**Action**: deferred — flagged as "not v1" unless the user produces the schema.
+
+### 15.8 Fixtures outside memory
+No DB table for fixtures is confirmed. Fixtures will continue to be exported via `MEMORY:*` as in `export_fixtures.lua`.
+
+### 15.9 Regen sub-type tagging
+No field distinguishes youth-academy / regen / free-agent origin. Stay with the `>= 460000` boolean.
+
+### 15.10 Python-side decisions
+- Packaging → **locked to PyInstaller**.
+- Charting fallback → PyQtGraph only; QtCharts considered only if a specific chart type is impossible.
+- Cache scope → **one SQLite file per career save**, name derived from user's club + save timestamp.
+
+---
+
+## 16. Review Checklist Before Starting Development
+
+- [ ] §15 probes executed; any blocker resolved.
+- [ ] CSV contracts in `docs/CSV_CONTRACTS.md` finalized (one file per §7 entry).
+- [ ] Sprint 0 layout reviewed (see ROADMAP.md).
 - [ ] Decision on dark-only vs light+dark at v1.
-- [ ] Sign-off on page list (§11.2) — add/remove before building.
+- [ ] Sign-off on page list (§12.2).
 
 ---
 
-*End of plan — no code is to be written until the user signs off on §16 and §17.*
+*End of plan.*

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.spec
+data/exports/*
+!data/exports/.gitkeep
+.pytest_cache/
+*.sqlite
+.idea/
+.vscode/
+
+# Local app cache (Windows %LOCALAPPDATA%\FC26Analytics equivalent)
+FC26Analytics/
