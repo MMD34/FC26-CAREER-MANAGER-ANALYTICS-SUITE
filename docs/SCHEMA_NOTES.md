@@ -11,7 +11,7 @@ Legend:
 
 ---
 
-## §15.1 Player string-name fields — BLOCKER
+## §15.1 Player string-name fields — RESOLVED (via `GetPlayerName` fallback)
 
 **Probe**: `probe_names_integrity.lua` → `PROBE_names_integrity_19_08_2025.csv`.
 
@@ -29,11 +29,13 @@ playerjerseynameid_resolution,UNRESOLVED,unresolved=200;zero_values=0,pid=19541;
 
 **Impact**: PT §7.3 `PLAYERS_SNAPSHOT` requires resolved `firstname`, `lastname`, `commonname`, `display_name`, `jerseyname` columns. With the current iteration pattern, the Lua-side cache approach described in PT §4.2 / §13.4 **does not work**.
 
-**Options** (must be chosen before Sprint 2):
-1. Fall back to `GetPlayerName(playerid)` per-player in the export script. Known slow — PT §13.2 flags it — but it is the only currently-confirmed alternative.
-2. Investigate whether `playernames` supports a different iteration primitive (e.g. indexed access). This requires a new follow-up probe and is not in the scope of Sprint 1.
+**Decision (user, 2026-04-18)**: Option A — fall back to `GetPlayerName(playerid)` per player.
 
-**Awaiting user direction** on which option to commit to.
+**Consequences for Sprint 2**:
+- `export_players_snapshot.lua` will call `GetPlayerName(playerid)` **once per player** instead of building a `nameid → name` cache from `playernames`. This overrides the PT §13.4 step-1 / step-6 guidance (which assumed the cache approach).
+- `display_name` derivation remains preference-ordered (common → first+last → jersey), but since `GetPlayerName` returns a single resolved string, `firstname` / `lastname` / `commonname` / `jerseyname` CSV columns will be emitted as empty strings unless a future probe recovers the individual `playernames` rows. The Python side must therefore treat those four columns as optional and rely on `display_name`.
+- Expected cost: ~30k `GetPlayerName` calls, well within the PT §13.4 "< 60 s" target in practice (confirmed informally by the existing `export_season_stats.lua` which already uses `GetPlayerName` inline).
+- No further Sprint 1 action needed.
 
 ---
 
@@ -175,7 +177,7 @@ Locked in PT §15.10 (PyInstaller packaging, PyQtGraph-only charting, one SQLite
 
 | § | Topic | Status | Blocker? |
 |---|---|---|---|
-| 15.1 | Player names via `playernames` | BLOCKER | ✅ — see "Options" above |
+| 15.1 | Player names via `playernames` | RESOLVED (via `GetPlayerName`) | — |
 | 15.2 | Face aggregates (PAC/SHO/…) | RESOLVED | — |
 | 15.3 | `teamplayerlinks.form` / `.injury` | PARTIAL (re-run pending) | — |
 | 15.4 | Formations / teamsheets | PARTIAL | — (Sprint 11 placeholder OK) |

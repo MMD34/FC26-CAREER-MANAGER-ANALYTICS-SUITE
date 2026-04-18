@@ -130,11 +130,11 @@ One row per player. Source: `players` JOIN `teamplayerlinks` on `playerid`, JOIN
 | export_date | string | no | computed | |
 | playerid | Int64 | no | `players.playerid` | |
 | is_generated | boolean | no | computed | `playerid >= 460000` |
-| firstname | string | yes | `playernames.name` via `firstnameid` | §15.1 blocker |
-| lastname | string | yes | `playernames.name` via `lastnameid` | §15.1 blocker |
-| commonname | string | yes | `playernames.name` via `commonnameid` | §15.1 blocker |
-| display_name | string | yes | computed in Lua | commonname → first+last → jersey |
-| jerseyname | string | yes | `playernames.name` via `playerjerseynameid` | §15.1 blocker |
+| firstname | string | yes | `playernames.name` via `firstnameid` | §15.1 — emitted empty; use `display_name` |
+| lastname | string | yes | `playernames.name` via `lastnameid` | §15.1 — emitted empty; use `display_name` |
+| commonname | string | yes | `playernames.name` via `commonnameid` | §15.1 — emitted empty; use `display_name` |
+| display_name | string | no | `GetPlayerName(playerid)` | resolved per §15.1 decision; required in practice |
+| jerseyname | string | yes | `playernames.name` via `playerjerseynameid` | §15.1 — emitted empty; use `display_name` |
 | birthdate | Int64 | no | `players.birthdate` | Gregorian-day |
 | age | Int64 | no | computed in Lua | from birthdate + `GetCurrentDate()` |
 | nationality | Int64 | yes | `players.nationality` | |

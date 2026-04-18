@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git -c core.autocrlf=false commit -m \"docs\\(s1.t3\\): resolve §15.1 via GetPlayerName fallback \\(Option A\\)\" -m \"Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>\")"
+    ]
+  }
+}
