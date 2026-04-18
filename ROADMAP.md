@@ -3,7 +3,7 @@
 > Target consumer: **a development AI** executing this plan autonomously.
 > Reference document: [`PLAN_TECHNIQUE.md`](PLAN_TECHNIQUE.md) (hereafter **PT**).
 > Schema reference: [`Structure Base de Données FC 26.md`](Structure%20Base%20de%20Données%20FC%2026.md) (hereafter **SBDD**).
-> Last updated: 2026-04-17
+> Last updated: 2026-04-18
 
 ---
 
@@ -141,9 +141,9 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-# PHASE B — Lua Export Scripts
+# PHASE B — Lua Export Scripts ✅ COMPLETED (2026-04-18)
 
-## Sprint 2 — Production Lua Exports
+## Sprint 2 — Production Lua Exports ✅ COMPLETED
 
 **Goal**: Implement the three new production export scripts defined in PT §13.4.
 
