@@ -11,9 +11,23 @@ assert(IsInCM(), "Script must be executed in career mode")
 -- FC 26 in-game player card. Pause execution and ask the user if the list is
 -- still empty.
 local SAMPLE_PLAYERIDS = {
-    -- TODO_ASK_USER: add playerids below, one per line, e.g.:
-    -- 158023,  -- L. Messi
-    -- 20801,   -- Cristiano Ronaldo
+    231747, -- Kylian Mbappé
+    277643, -- Lamine Yamal
+    239985, -- Erling Haaland
+    251854, -- Pedri
+    238794, -- Vinícius Jr.
+    272834, -- João Neves
+    255253, -- Vitinha
+    252145, -- Nuno Mendes
+    256630, -- Florian Wirtz
+    271421, -- Désiré Doué
+    231443, -- Ousmane Dembélé
+    235212, -- Achraf Hakimi
+    239053, -- Federico Valverde
+    243715, -- William Saliba
+    247635, -- Khvicha Kvaratskhelia
+    256196, -- Willian Pacho
+    233419, -- Raphinha
 }
 
 local FACE_COLS = { "pacdiv", "shohan", "paskic", "driref", "defspe", "phypos" }
