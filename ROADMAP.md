@@ -42,9 +42,9 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-# PHASE A — Foundation
+# PHASE A — Foundation ✅ COMPLETED (2026-04-18)
 
-## Sprint 0 — Project Restructure (MANDATORY, FIRST)
+## Sprint 0 — Project Restructure (MANDATORY, FIRST) ✅ COMPLETED
 
 **Goal**: Reorganize the repository to match PT §5 before any code is written.
 
@@ -103,7 +103,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 1 — Schema Probes & Contract Finalization
+## Sprint 1 — Schema Probes & Contract Finalization ✅ COMPLETED
 
 **Goal**: Resolve every PT §15 item that can be resolved via probe scripts; freeze all CSV contracts in `docs/CSV_CONTRACTS.md`.
 
