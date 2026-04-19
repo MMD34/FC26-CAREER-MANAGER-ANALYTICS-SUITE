@@ -88,7 +88,7 @@ QToolBar {{
     """
     
     components = f"""
-/* New Components added for Sprint 1.2 */
+/* New Components added for Sprint 1.2 & Phase 3 */
 QWidget#chip--default {{
     background-color: {palette.chip};
     color: {palette.text};
@@ -126,6 +126,23 @@ QWidget#chip--mono {{
     border-radius: {radii.sm}px;
     padding: {pad(2)}px {pad(8)}px;
 }}
+
+/* Pills */
+QLabel#pill--hi {{ background-color: {palette.bad}; color: {palette.bg}; border-radius: {radii.md}px; padding: {pad(2)}px {pad(8)}px; font-weight: 600; font-size: {typo.xs}px; text-transform: uppercase; }}
+QLabel#pill--md {{ background-color: {palette.ok}; color: {palette.bg}; border-radius: {radii.md}px; padding: {pad(2)}px {pad(8)}px; font-weight: 600; font-size: {typo.xs}px; text-transform: uppercase; }}
+QLabel#pill--lo {{ background-color: {palette.warn}; color: {palette.bg}; border-radius: {radii.md}px; padding: {pad(2)}px {pad(8)}px; font-weight: 600; font-size: {typo.xs}px; text-transform: uppercase; }}
+
+/* PosBadge */
+QLabel#pos-badge--gk {{ background-color: {palette.warn}; color: {palette.bg}; border-radius: {radii.sm}px; padding: {pad(2)}px {pad(4)}px; font-weight: 700; font-size: {typo.xs}px; }}
+QLabel#pos-badge--def {{ background-color: {palette.accent}; color: {palette.bg}; border-radius: {radii.sm}px; padding: {pad(2)}px {pad(4)}px; font-weight: 700; font-size: {typo.xs}px; }}
+QLabel#pos-badge--mid {{ background-color: {palette.ok}; color: {palette.bg}; border-radius: {radii.sm}px; padding: {pad(2)}px {pad(4)}px; font-weight: 700; font-size: {typo.xs}px; }}
+QLabel#pos-badge--att {{ background-color: {palette.bad}; color: {palette.bg}; border-radius: {radii.sm}px; padding: {pad(2)}px {pad(4)}px; font-weight: 700; font-size: {typo.xs}px; }}
+QLabel#pos-badge--unknown {{ background-color: {palette.dim}; color: {palette.bg}; border-radius: {radii.sm}px; padding: {pad(2)}px {pad(4)}px; font-weight: 700; font-size: {typo.xs}px; }}
+
+/* Avatar */
+QLabel#avatar {{ background-color: {palette.panel_2}; color: {palette.text}; border: 1px solid {palette.line}; border-radius: 12px; font-weight: 600; font-size: {typo.xs}px; padding: 4px; }}
+
+/* Buttons */
 QPushButton#btn--primary {{
     background-color: {palette.accent};
     color: {palette.bg};
@@ -139,6 +156,70 @@ QPushButton#btn--ghost {{
     border: none;
 }}
 QPushButton#btn--ghost:hover {{ background-color: {palette.panel_2}; }}
+
+QPushButton#icon-btn {{ background-color: transparent; border: none; padding: {pad(4)}px; }}
+QPushButton#icon-btn:hover {{ background-color: {palette.panel_2}; border-radius: {radii.sm}px; }}
+
+QPushButton#filter {{
+    background-color: {palette.panel};
+    color: {palette.text};
+    border: 1px solid {palette.line};
+    border-radius: {radii.lg}px;
+    padding: {pad(4)}px {pad(12)}px;
+}}
+QPushButton#filter:hover {{ background-color: {palette.panel_2}; }}
+QPushButton#filter:checked {{ background-color: {palette.accent}; color: {palette.bg}; border-color: {palette.accent}; }}
+
+/* Tabs */
+QFrame#tab-row {{ border-bottom: 1px solid {palette.line}; }}
+QPushButton#tab {{
+    background-color: transparent;
+    color: {palette.muted};
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: {pad(8)}px {pad(12)}px;
+    font-weight: 600;
+}}
+QPushButton#tab:hover {{ color: {palette.text}; background-color: {palette.panel_2}; }}
+QPushButton#tab:checked {{ color: {palette.text}; border-bottom: 2px solid {palette.accent}; }}
+
+QLabel#section-title {{ font-size: {typo.lg}px; font-weight: 700; font-family: {typo.display}; color: {palette.text}; }}
+
+/* Heavy Components */
+QFrame#drawer-panel {{ background-color: {palette.panel}; border-left: 1px solid {palette.line}; }}
+QFrame#drawer-header {{ border-bottom: 1px solid {palette.line}; }}
+QLabel#drawer-title {{ font-size: {typo.md}px; font-weight: 600; color: {palette.text}; }}
+QLabel#attr-label {{ font-size: {typo.sm}px; color: {palette.muted}; }}
+QLabel#attr-value {{ font-size: {typo.sm}px; font-weight: 600; color: {palette.text}; font-family: {typo.mono}; }}
+QWidget#attr-bar-fill[level="ok"] {{ background-color: {palette.ok}; border-radius: 3px; }}
+QWidget#attr-bar-fill[level="warn"] {{ background-color: {palette.warn}; border-radius: 3px; }}
+QWidget#attr-bar-fill[level="bad"] {{ background-color: {palette.bad}; border-radius: 3px; }}
+QWidget#attr-bar-empty {{ background-color: {palette.line_2}; border-radius: 3px; }}
+
+QFrame#dropzone {{
+    background-color: {palette.panel_2};
+    border: 2px dashed {palette.line_2};
+    border-radius: {radii.md}px;
+}}
+QFrame#dropzone[drag-hover="true"] {{
+    background-color: {palette.chip_accent};
+    border: 2px dashed {palette.accent};
+}}
+QLabel#dropzone-text {{ font-size: {typo.md}px; font-weight: 600; color: {palette.text}; }}
+QLabel#dropzone-sub {{ font-size: {typo.sm}px; color: {palette.dim}; }}
+QFrame#file-row {{ background-color: {palette.panel}; border: 1px solid {palette.line}; border-radius: {radii.sm}px; }}
+QLabel#file-name {{ font-family: {typo.mono}; font-size: {typo.sm}px; color: {palette.text}; }}
+
+QPlainTextEdit#log-view {{
+    background-color: {palette.panel_2};
+    color: {palette.text};
+    border: 1px solid {palette.line};
+    border-radius: {radii.sm}px;
+    font-family: {typo.mono};
+    font-size: {typo.sm}px;
+    padding: {pad(8)}px;
+}}
     """
 
     shell = f"""

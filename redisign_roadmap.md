@@ -117,7 +117,7 @@ Design-system rules enforced across sprints:
 
 ---
 
-### Phase 3 — Component Library Buildout
+### Phase 3 — Component Library Buildout — **COMPLETED**
 
 **Sprint 3.1 — Core primitives**
 - `Chip` (variants: default/ok/warn/bad/accent/mono), `Pill` (hi/md/lo), `PosBadge` (GK/DEF/MID/ATT), `Avatar`.
