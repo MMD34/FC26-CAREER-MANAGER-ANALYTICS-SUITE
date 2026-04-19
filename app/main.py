@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 from app.core.logging_setup import configure_logging, get_logger
 from app.core.paths import log_dir
 from app.ui.app_window import AppWindow
+from app.ui.theme import LightPalette, Palette, load_qss
 
 _SETTINGS_PATH = Path(__file__).parent / "config" / "settings.toml"
 _QSS_PATH = Path(__file__).parent / "config" / "theme.qss"
@@ -29,8 +30,9 @@ def main() -> int:
     log.info("starting FC26 Analytics (theme=%s)", settings.get("app", {}).get("theme", "dark"))
 
     app = QApplication(sys.argv)
-    if _QSS_PATH.exists():
-        app.setStyleSheet(_QSS_PATH.read_text(encoding="utf-8"))
+    theme_name = settings.get("app", {}).get("theme", "dark")
+    palette = LightPalette() if theme_name == "light" else Palette()
+    app.setStyleSheet(load_qss(palette))
 
     window = AppWindow()
     window.show()

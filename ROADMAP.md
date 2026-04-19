@@ -378,9 +378,9 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-# PHASE E — UI
+# PHASE E — UI ✅ COMPLETED (2026-04-18)
 
-## Sprint 8 — UI Shell, Theme, Base Widgets
+## Sprint 8 — UI Shell, Theme, Base Widgets ✅ COMPLETED
 
 **Goal**: Shell with working sidebar routing + reusable widget primitives.
 
@@ -406,7 +406,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 9 — Overview & Analytics Pages
+## Sprint 9 — Overview & Analytics Pages ✅ COMPLETED
 
 **Goal**: Bind real data to the first two pages.
 
@@ -428,7 +428,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 10 — Squad & Wonderkids Pages
+## Sprint 10 — Squad & Wonderkids Pages ✅ COMPLETED
 
 **Tasks**
 
@@ -449,7 +449,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 11 — Tactics & Transfers Pages
+## Sprint 11 — Tactics & Transfers Pages ✅ COMPLETED
 
 **Tasks**
 
@@ -472,7 +472,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 12 — Import Page, Polish, Packaging
+## Sprint 12 — Import Page, Polish, Packaging ✅ COMPLETED
 
 **Tasks**
 
@@ -502,7 +502,7 @@ then **pause the current task and ask for clarification**, citing the sprint num
 
 ---
 
-## Sprint 13 — Testing, QA, Documentation
+## Sprint 13 — Testing, QA, Documentation ✅ COMPLETED
 
 **Tasks**
 

@@ -6,10 +6,8 @@ require 'imports/other/helpers'
 
 assert(IsInCM(), "Script must be executed in career mode")
 
--- TODO_ASK_USER: please provide up to 20 well-known `playerid`s here
--- (typically real, identifiable stars) so we can compare raw values with the
--- FC 26 in-game player card. Pause execution and ask the user if the list is
--- still empty.
+-- Sample player IDs supplied by the user (resolved 2026-04-18, see
+-- docs/SCHEMA_NOTES.md §15.2 for the comparison evidence).
 local SAMPLE_PLAYERIDS = {
     231747, -- Kylian Mbappé
     277643, -- Lamine Yamal
@@ -57,7 +55,7 @@ io.write("probe,status,detail,sample_value\n")
 
 if #SAMPLE_PLAYERIDS == 0 then
     write_row("sample_list", "MISSING",
-              "SAMPLE_PLAYERIDS is empty (TODO_ASK_USER) — ask user for playerids", "")
+              "SAMPLE_PLAYERIDS is empty — populate the list at the top of this script", "")
     io.close(f)
     LOGGER:LogError("probe_face_aggregates: SAMPLE_PLAYERIDS is empty")
     return
