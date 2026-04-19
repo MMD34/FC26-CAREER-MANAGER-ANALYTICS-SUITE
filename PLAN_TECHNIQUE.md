@@ -707,4 +707,132 @@ No field distinguishes youth-academy / regen / free-agent origin. Stay with the 
 
 ---
 
+## 17. UI Architecture v2 (Redesign Integration)
+
+This section extends the plan to cover the UI/UX redesign defined by the prototype at [Redisign app/FC26 Analytics Redesign.html](Redisign%20app/FC26%20Analytics%20Redesign.html). The phased execution plan lives in [redisign_roadmap.md](redisign_roadmap.md); this section documents the **technical architecture** the redesign introduces.
+
+### 17.1 Target structure
+
+```
+app/ui/
+    design/          # tokens, QSS builder, ThemeManager
+        tokens.py
+        qss.py
+        theme_manager.py
+    components/      # reusable primitives (Chip, Pill, Avatar, Card, Tabs, …)
+    shell/           # Sidebar, Topbar, StatusBar, AppShell
+    charts/          # line_chart, scatter, pitch, dial, bar_row, sparkline
+    pages/           # existing page modules (unchanged signatures)
+    widgets/         # legacy — deleted sprint-by-sprint as replacements land
+    theme.py         # thin shim → forwards to design/
+    app_window.py    # becomes AppShell composition root
+```
+
+### 17.2 Design-token layer (`app/ui/design/tokens.py`)
+
+Frozen dataclasses for the complete token set, mirroring the HTML `:root` variables:
+
+- `Palette` — dark + light variants: `bg`, `panel`, `panel_2`, `line`, `line_2`, `text`, `muted`, `dim`, `accent`, `accent_2`, `ok`, `warn`, `bad`, `chip`.
+- `Typography` — three families (`sans`, `mono`, `display`) + seven sizes (`xs/10`, `sm/11`, `base/13`, `md/15`, `lg/22`, `xl/26`, `hero/56`).
+- `Spacing` — `xs/4, sm/8, md/12, lg/16, xl/24, xxl/32`.
+- `Radii` — `sm/6, md/10, lg/14`.
+- `Elevation` — shadow presets for drawer/tweaks/toast.
+- `Density` — compact / cozy / comfortable multiplier applied to paddings.
+- `Motion` — durations/easings for hover + theme-swap transitions.
+
+Rule: **no hex literal outside `tokens.py`**. Widgets consume tokens via `ThemeManager.current()`.
+
+### 17.3 QSS builder (`app/ui/design/qss.py`)
+
+Pure function `build_qss(palette: Palette, density: Density, typography: Typography) -> str` composed from discrete sections: `_base()`, `_buttons()`, `_inputs()`, `_tables()`, `_cards()`, `_chips()`, `_sidebar()`, `_topbar()`, `_statusbar()`, `_drawer()`, `_dropzone()`. Each section is independently testable. Replaces the monolithic `load_qss` in [app/ui/theme.py](app/ui/theme.py); old symbol kept as a thin forwarder.
+
+### 17.4 ThemeManager
+
+Singleton in `app/ui/design/theme_manager.py`:
+
+- Holds current `Palette` + `Density`.
+- Signals: `theme_changed(Palette)`, `density_changed(Density)`.
+- Calls `QApplication.setStyleSheet(build_qss(...))` and walks live widgets calling `style().unpolish(w); style().polish(w)` to force re-render without restart.
+- Reads preferred theme from QSettings on boot.
+
+### 17.5 Component library (`app/ui/components/`)
+
+One module per component. Every component:
+
+1. Sets `setObjectName(...)` matching the HTML class (`card`, `kpi`, `chip--ok`, `btn--primary`).
+2. Exposes a minimal typed API — no business logic.
+3. Is themable purely via QSS; no `setStyleSheet` on instances.
+
+Catalogue:
+- **Primitives**: `Chip(variant)`, `Pill(level)`, `PosBadge(role)`, `Avatar(initials)`, `SectionTitle`, `Legend`.
+- **Controls**: `PrimaryButton`, `GhostButton`, `IconButton(svg)`, `FilterChip`, `Tabs`.
+- **Layout**: `Card`, `TwoCol`, `ThreeCol`, `FourCol`.
+- **Heavy**: `DrawerPanel`, `Dropzone`, `LogView`, `Tweaks` (internal dev panel).
+
+### 17.6 Shell layer (`app/ui/shell/`)
+
+- `Sidebar` — brand block, section titles, `NavItem` (icon, label, badge, active-bar), collapsible to 60px, footer `CareerCard`.
+- `Topbar` — breadcrumb bound to page stack, search placeholder (`⌘K`), date chip, theme toggle, primary `Import snapshot` CTA.
+- `StatusBar` — cache state, row counts, build hash (monospace).
+- `AppShell` — composition root; replaces the current `QMainWindow` chrome in [app/ui/app_window.py](app/ui/app_window.py). Gated by env flag `FC26_UI_V2` during Phase 2.
+
+### 17.7 Chart primitives (`app/ui/charts/`)
+
+All chart widgets read tokens from `ThemeManager`. CSS-only effects are approximated:
+
+| HTML effect | PySide approximation |
+|---|---|
+| `color-mix()` tints | Pre-blended RGB in `tokens.py` |
+| `backdrop-filter: blur` | Solid `panel` with reduced opacity |
+| conic gradient (dial ring) | `QPainter.drawArc` with pen cap `FlatCap` |
+| `-webkit-background-clip: text` | `QLinearGradient` fill via `QPainter.setPen` on text path |
+| SVG grid background (scatter) | `QPainter` grid draw on `paintEvent` |
+
+Widgets: `sparkline.py` (upgraded), `line_chart.py`, `scatter.py`, `bar_row.py`, `dial.py`, `pitch.py`. Default engine: `QPainter`. QtCharts used only where interaction (hover/zoom) requires it, per §15.10.
+
+### 17.8 Page state contract
+
+[app/ui/pages/_base.py](app/ui/pages/_base.py) gains:
+
+```
+def set_state(self, state: Literal["loading", "empty", "error", "ready"], *, error: str | None = None) -> None: ...
+```
+
+Default stack: `QStackedLayout` with four slots. Pages override only the `ready` slot; loading/empty/error use tokenized default views from `components/`. Data-loading code calls `set_state("loading")` before work and `set_state("ready")` when the model is populated — no visual-layer awareness of business logic.
+
+### 17.9 Fonts
+
+Inter (sans + display) and JetBrains Mono embedded under `packaging/fonts/`. Registered once in `app/main.py`:
+
+```
+QFontDatabase.addApplicationFont(":/fonts/Inter-Variable.ttf")
+QFontDatabase.addApplicationFont(":/fonts/JetBrainsMono-Variable.ttf")
+```
+
+Falls back to `Segoe UI` / `Consolas` per the HTML font-stack if loading fails.
+
+### 17.10 Testing
+
+- `tests/ui/smoke_test_shell.py` — boots `AppShell`, asserts QSS applies without warnings.
+- `tests/ui/snapshot/` — `QPixmap` captures of 8 canonical screens at dark+light × compact+cozy+comfortable, diffed against golden images with a small tolerance.
+- `tests/ui/components/` — one test per primitive verifying object-name and token consumption.
+
+### 17.11 Migration rules
+
+Authoritative list is in [redisign_roadmap.md](redisign_roadmap.md) under **Migration Strategy** and **Cross-Sprint Rules**. Key constraints reproduced here for the technical plan:
+
+- No changes to [app/analytics/](app/analytics/), [app/domain/](app/domain/), [app/services/](app/services/), [app/import_/](app/import_/), [app/core/](app/core/), [app/config/](app/config/) during UI-v2 sprints.
+- Public signature of every page (`__init__`, `load_data`, `set_state`) is stable so `AppShell` is decoupled from page internals.
+- Legacy `app/ui/widgets/` is retired incrementally — each widget is deleted in the same commit that wires its `components/` replacement.
+- Every sprint ends on a green smoke + snapshot suite; otherwise it is reverted.
+
+### 17.12 Decisions locked for UI v2
+
+- **Theme at v1**: dark-only shipped first; light variant implemented in Phase 1 but exposed only via the dev tweaks panel until Phase 6 QA.
+- **Density at v1**: single `cozy` default; compact/comfortable wired but not exposed in public UI at first ship.
+- **Icons**: inline SVG → `QSvgRenderer` → `QPixmap` at runtime. No icon-font dependency, no asset pipeline.
+- **Search (`⌘K`)**: UI stub only in Phase 2; backed behavior deferred to post-redesign.
+
+---
+
 *End of plan.*
