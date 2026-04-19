@@ -8,7 +8,9 @@
       "Bash(python -c \"import sys; print\\(sys.version\\)\")",
       "Bash(pip install *)",
       "Bash(python -m pip install pandas pytest)",
-      "Bash(python -m pytest -q)"
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pytest tests/test_analytics_standings.py tests/test_analytics_form.py -q)",
+      "Bash(python -m pytest tests/ -q)"
     ]
   }
 }
