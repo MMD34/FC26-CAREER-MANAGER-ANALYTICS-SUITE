@@ -9,7 +9,7 @@ from app.analytics.wonderkids import filter_wonderkids, origin_label, position_g
 from app.core.constants import DEFAULT_WONDERKID_MAX_AGE, DEFAULT_WONDERKID_POTENTIAL
 from app.services.app_context import AppContext
 from app.ui.pages._base import PageBase
-from app.ui.widgets.chart_panel import ChartPanel, Series
+from app.ui.charts.chart_panel import ChartPanel, Series
 from app.ui.widgets.data_table import DataTable
 from app.ui.widgets.player_drawer import PlayerDrawer
 

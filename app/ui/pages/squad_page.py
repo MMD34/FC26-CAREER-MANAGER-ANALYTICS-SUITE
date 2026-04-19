@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QSplitter, QVBox
 from app.analytics.squad import form_leaders, top_by_rating, top_scorers
 from app.services.app_context import AppContext
 from app.ui.pages._base import PageBase
-from app.ui.widgets.chart_panel import ChartPanel, Series
+from app.ui.charts.chart_panel import ChartPanel, Series
 from app.ui.widgets.data_table import DataTable
 from app.ui.widgets.filter_bar import FilterBar
 from app.ui.widgets.player_drawer import PlayerDrawer

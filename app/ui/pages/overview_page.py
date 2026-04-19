@@ -16,7 +16,7 @@ from app.analytics.form import decode_team_form
 from app.domain.season import SeasonOverview
 from app.services.app_context import AppContext
 from app.ui.pages._base import PageBase
-from app.ui.widgets.sparkline import Sparkline
+from app.ui.charts.sparkline import Sparkline
 from app.ui.widgets.stat_card import StatCard
 
 

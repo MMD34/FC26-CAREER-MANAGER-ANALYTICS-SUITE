@@ -5,7 +5,7 @@ from typing import Optional
 
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
-from app.ui.widgets.sparkline import Sparkline
+from app.ui.charts.sparkline import Sparkline
 
 
 class StatCard(QFrame):

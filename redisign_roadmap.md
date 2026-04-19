@@ -135,7 +135,7 @@ Design-system rules enforced across sprints:
 
 ---
 
-### Phase 4 — Chart Redesign
+### Phase 4 — Chart Redesign — **COMPLETED**
 
 **Sprint 4.1 — Sparkline & line chart**
 - Upgrade [app/ui/widgets/sparkline.py](app/ui/widgets/sparkline.py) to match HTML sparkline (token colors, smoothed polyline).

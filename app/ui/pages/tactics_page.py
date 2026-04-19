@@ -13,7 +13,7 @@ from app.domain.season import SeasonOverview
 from app.domain.standings import StandingsRow
 from app.services.app_context import AppContext
 from app.ui.pages._base import PageBase
-from app.ui.widgets.chart_panel import ChartPanel, Series
+from app.ui.charts.chart_panel import ChartPanel, Series
 from app.ui.widgets.kpi_tile import KpiTile
 
 

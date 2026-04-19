@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.analytics.wonderkids import origin_label, position_group
-from app.ui.widgets.chart_panel import ChartPanel, Series
+from app.ui.charts.chart_panel import ChartPanel, Series
 
 _FACE_AXES = ("pacdiv", "shohan", "paskic", "driref", "defspe", "phypos")
 _FACE_LABEL = ("PAC", "SHO", "PAS", "DRI", "DEF", "PHY")
